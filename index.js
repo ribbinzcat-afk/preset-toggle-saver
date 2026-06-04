@@ -5,7 +5,7 @@ const extensionName = "preset-toggle-saver";
 const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
 
 const defaultSettings = {
-    presets: {}
+    presets: {} // รูปแบบข้อมูลจะเปลี่ยนไปเป็น { "Preset Name": { "toggle_id_1": true, "toggle_id_2": false } }
 };
 
 function getCurrentPresetName() {
@@ -27,6 +27,7 @@ function loadSettings() {
     }
 }
 
+// CHANGED: เปลี่ยนวิธีเซฟ ให้จดจำ Identifier (ID ของ div ที่ครอบมันอยู่ หรือ ID ของตัวมันเอง)
 function onSaveButtonClicked() {
     const currentPreset = getCurrentPresetName();
     if (currentPreset === "ไม่ทราบชื่อ Preset") {
@@ -34,42 +35,50 @@ function onSaveButtonClicked() {
         return;
     }
 
-    const toggleStates = [];
+    const toggleStates = {};
+    let count = 0;
+
     $('.prompt-manager-toggle-action').each(function() {
         const isOn = $(this).hasClass('fa-toggle-on');
-        toggleStates.push(isOn);
+
+        // หา ID ที่ไม่ซ้ำกันของ Toggle ตัวนี้ โดยหาจาก parent หรือตัวมันเอง
+        // ใน SillyTavern Toggle มักจะอยู่ใน div ที่มี id เริ่มด้วย "prompt-manager-"
+        const parentId = $(this).closest('[id]').attr('id') || `unknown_toggle_${count}`;
+
+        toggleStates[parentId] = isOn;
+        count++;
     });
 
     extension_settings[extensionName].presets[currentPreset] = toggleStates;
     saveSettingsDebounced();
 
-    toastr.success(`บันทึกสถานะ Toggles สำหรับ Preset: ${currentPreset} เรียบร้อยแล้วค่ะ!`, "Preset Toggle Saver");
+    toastr.success(`บันทึกสถานะ ${count} Toggles สำหรับ Preset: ${currentPreset} เรียบร้อยแล้วค่ะ!`, "Preset Toggle Saver");
     console.log(`[${extensionName}] บันทึก Preset [${currentPreset}]:`, toggleStates);
 }
 
-// NEW: ฟังก์ชันสำหรับโหลดและปรับสถานะ Toggle ให้ตรงกับที่เซฟไว้
+// CHANGED: เปลี่ยนวิธีโหลด ให้จับคู่กับ Identifier ที่เซฟไว้
 function applySavedToggles(presetName) {
     const savedStates = extension_settings[extensionName].presets[presetName];
 
-    // ถ้ายังไม่เคยเซฟข้อมูลของ Preset นี้ไว้ ก็ไม่ต้องทำอะไรค่ะ
     if (!savedStates) {
         console.log(`[${extensionName}] ไม่มีข้อมูล Toggles ที่บันทึกไว้สำหรับ: ${presetName}`);
         return;
     }
 
-    console.log(`[${extensionName}] กำลังโหลด Toggles สำหรับ: ${presetName}`, savedStates);
+    console.log(`[${extensionName}] กำลังโหลด Toggles สำหรับ: ${presetName}`);
 
     let changedCount = 0;
 
-    // กวาดหา Toggle ทั้งหมดที่มีอยู่บนหน้าจอ
-    $('.prompt-manager-toggle-action').each(function(index) {
-        // ถ้า index เกินกว่าข้อมูลที่เราเคยเซฟไว้ ก็ข้ามไปค่ะ (เผื่อมีการเพิ่ม/ลดจำนวน Toggle ในอนาคต)
-        if (index >= savedStates.length) return;
+    $('.prompt-manager-toggle-action').each(function() {
+        // หา ID แบบเดียวกับตอนที่เซฟ
+        const parentId = $(this).closest('[id]').attr('id');
 
-        const shouldBeOn = savedStates[index];
+        // ถ้าหา ID ไม่เจอ หรือไม่มีข้อมูลที่เซฟไว้สำหรับ ID นี้ ให้ข้ามไปค่ะ
+        if (!parentId || savedStates[parentId] === undefined) return;
+
+        const shouldBeOn = savedStates[parentId];
         const isCurrentlyOn = $(this).hasClass('fa-toggle-on');
 
-        // ถ้าสถานะปัจจุบัน ไม่ตรงกับที่เราเซฟไว้ ให้ทำการจำลองการคลิกเพื่อสลับสถานะค่ะ
         if (shouldBeOn !== isCurrentlyOn) {
             $(this).trigger('click');
             changedCount++;
@@ -96,15 +105,9 @@ function updatePresetUi() {
     $("#pts-btn-delete").off("click").on("click", () => console.log(`[${extensionName}] ปุ่ม 'ลบ' ถูกคลิก (Preset: ${currentPreset})`));
 }
 
-// NEW: ฟังก์ชันที่จะทำงานเมื่อมีการเปลี่ยน Preset ใน Dropdown
 function onPresetChanged() {
-    // อัปเดต UI เพื่อให้ชื่อเปลี่ยน
     updatePresetUi();
-
-    // ดึงชื่อ Preset ใหม่ที่เพิ่งเปลี่ยนมา
     const newPresetName = getCurrentPresetName();
-
-    // โหลด Toggle ที่เซฟไว้ (ถ้ามี)
     if (newPresetName !== "ไม่ทราบชื่อ Preset") {
         applySavedToggles(newPresetName);
     }
@@ -131,14 +134,11 @@ jQuery(async () => {
         loadSettings();
         updatePresetUi();
 
-        // CHANGED: เพิ่มเวลา Delay ให้ครอบคลุมมากขึ้น รอจนกว่า SillyTavern จะพร้อมจริงๆ ค่ะ
         setTimeout(updatePresetUi, 1000);
         setTimeout(updatePresetUi, 3000);
-        setTimeout(updatePresetUi, 6000); // เผื่อคอมพิวเตอร์กำลังประมวลผลหนักค่ะ
+        setTimeout(updatePresetUi, 6000);
 
-        // CHANGED: เปลี่ยนให้ไปเรียกฟังก์ชัน onPresetChanged แทน เพื่อให้โหลด Toggle ด้วย
         $(document).on("change", 'select[id^="settings_preset_"]', onPresetChanged);
-
         $(document).on("click", '.api-connection-settings', () => {
              setTimeout(onPresetChanged, 100);
         });
