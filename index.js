@@ -179,19 +179,23 @@ jQuery(async () => {
         const settingsHtml = await $.get(`${extensionFolderPath}/example.html`);
         $("#extensions_settings2").append(settingsHtml);
 
+        // ปรับปรุง UI ให้ยืดหยุ่นและพอดีกับหน้าจอมากขึ้นค่ะ
         const mainUiHtml = `
-            <div id="pts-standalone-ui" style="margin: 15px 0; padding: 15px; background: var(--SmartThemeBlurTintColor); border: 1px solid var(--SmartThemeBorderColor); border-radius: 8px;">
-                <h4 style="margin: 0 0 10px 0;"><span class="fa-solid fa-folder-open"></span> Toggle Presets</h4>
-                <div style="display: flex; gap: 5px; align-items: center; margin-bottom: 10px;">
-                    <select id="pts-preset-select" class="text_pole" style="flex-grow: 1;"></select>
-                    <div id="pts-btn-new" class="menu_button fa-solid fa-plus" title="สร้างกลุ่ม Toggle ใหม่ใน Preset นี้"></div>
+            <div id="pts-standalone-ui" style="margin: 15px 0; padding: 15px; background: var(--SmartThemeBlurTintColor); border: 1px solid var(--SmartThemeBorderColor); border-radius: 8px; width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px;">
+                <h4 style="margin: 0;"><span class="fa-solid fa-folder-open"></span> Toggle Presets</h4>
+
+                <div style="display: flex; gap: 5px; align-items: center; width: 100%;">
+                    <select id="pts-preset-select" class="text_pole" style="flex-grow: 1; width: 100%;"></select>
+                    <div id="pts-btn-new" class="menu_button fa-solid fa-plus" title="สร้างกลุ่ม Toggle ใหม่ใน Preset นี้" style="flex-shrink: 0;"></div>
                 </div>
-                <div style="display: flex; gap: 5px;">
+
+                <div style="display: flex; gap: 5px; width: 100%;">
                     <input id="pts-btn-apply" class="menu_button" type="button" value="โหลดมาใช้" style="flex: 1;" />
                     <input id="pts-btn-save" class="menu_button" type="button" value="เซฟทับ" style="flex: 1;" />
-                    <div id="pts-btn-delete" class="menu_button fa-solid fa-trash redWarningBG" title="ลบกลุ่มนี้" style="padding: 10px;"></div>
+                    <div id="pts-btn-delete" class="menu_button fa-solid fa-trash redWarningBG" title="ลบกลุ่มนี้" style="padding: 10px; flex-shrink: 0;"></div>
                 </div>
-                <small style="color: var(--SmartThemeBodyColor); opacity: 0.7;">* กลุ่ม Toggle เหล่านี้ถูกจัดเก็บแยกตาม AI Preset หลักแต่ละตัวค่ะ</small>
+
+                <small style="color: var(--SmartThemeBodyColor); opacity: 0.7; margin-top: 5px;">* กลุ่ม Toggle เหล่านี้ถูกจัดเก็บแยกตาม AI Preset หลักแต่ละตัวค่ะ</small>
             </div>
         `;
 
