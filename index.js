@@ -5,33 +5,62 @@ const extensionName = "preset-toggle-saver";
 const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
 
 const defaultSettings = {
-    presets: {}
+    myPresets: {},       // เก็บข้อมูล Toggle ในแต่ละ Preset
+    currentPreset: ""    // จำว่าตอนนี้เรากำลังเลือก Preset อะไรอยู่
 };
-
-function getCurrentPresetName() {
-    const visibleSelect = $('select[id^="settings_preset_"]:visible');
-    if (visibleSelect.length > 0) {
-        const presetName = visibleSelect.find(":selected").text();
-        return presetName || "ไม่ทราบชื่อ Preset";
-    }
-    return "ไม่ทราบชื่อ Preset";
-}
 
 function loadSettings() {
     extension_settings[extensionName] = extension_settings[extensionName] || {};
     if (Object.keys(extension_settings[extensionName]).length === 0) {
         Object.assign(extension_settings[extensionName], defaultSettings);
     }
-    if (!extension_settings[extensionName].presets) {
-        extension_settings[extensionName].presets = {};
+    if (!extension_settings[extensionName].myPresets) extension_settings[extensionName].myPresets = {};
+    if (extension_settings[extensionName].currentPreset === undefined) extension_settings[extensionName].currentPreset = "";
+}
+
+// อัปเดตรายชื่อใน Dropdown
+function updateDropdown() {
+    const presetNames = Object.keys(extension_settings[extensionName].myPresets);
+    const $select = $("#pts-preset-select");
+    $select.empty();
+
+    if (presetNames.length === 0) {
+        $select.append(`<option value="">(ยังไม่มี Preset)</option>`);
+    } else {
+        presetNames.forEach(name => {
+            $select.append(`<option value="${name}">${name}</option>`);
+        });
+        // เลือกตัวที่เคยเลือกไว้
+        if (extension_settings[extensionName].currentPreset && presetNames.includes(extension_settings[extensionName].currentPreset)) {
+            $select.val(extension_settings[extensionName].currentPreset);
+        }
     }
 }
 
-// CHANGED: เปลี่ยนวิธีจำไปใช้ data-pm-identifier (บัตรประชาชนของ Prompt)
-function onSaveButtonClicked() {
-    const currentPreset = getCurrentPresetName();
-    if (currentPreset === "ไม่ทราบชื่อ Preset") {
-        toastr.warning("ไม่สามารถเซฟได้เพราะไม่ทราบชื่อ Preset ค่ะ", "Preset Toggle Saver");
+// สร้าง Preset ใหม่
+function onNewClicked() {
+    const newName = prompt("ตั้งชื่อ Preset ใหม่สำหรับ Toggle ของคุณค่ะ:");
+    if (!newName) return;
+
+    if (extension_settings[extensionName].myPresets[newName]) {
+        toastr.warning("ชื่อนี้มีอยู่แล้วค่ะ ลองใช้ชื่ออื่นนะคะ", "Toggle Presets");
+        return;
+    }
+
+    // สร้างพื้นที่ว่างๆ ไว้ก่อน
+    extension_settings[extensionName].myPresets[newName] = {};
+    extension_settings[extensionName].currentPreset = newName;
+    saveSettingsDebounced();
+
+    updateDropdown();
+    onSaveClicked(); // กดเซฟสถานะปัจจุบันให้ทันที
+}
+
+// เซฟสถานะ Toggle ลง Preset ปัจจุบัน
+function onSaveClicked() {
+    const currentName = $("#pts-preset-select").val();
+    if (!currentName) {
+        toastr.warning("กรุณาสร้างหรือเลือก Preset ก่อนเซฟนะคะ", "Toggle Presets");
         return;
     }
 
@@ -41,42 +70,36 @@ function onSaveButtonClicked() {
     $('#completion_prompt_manager .prompt-manager-toggle-action').each(function() {
         const isOn = $(this).hasClass('fa-toggle-on');
 
-        // ย้อนกลับไปหา <li> ที่ครอบตัวมันอยู่ เพื่อดึง data-pm-identifier
-        const identifier = $(this).closest('li').attr('data-pm-identifier');
+        // จำจาก "ชื่อ" ของหัวข้อ (เช่น ♡ Milky Core ♡) แทนรหัสยาวๆ ค่ะ
+        const promptName = $(this).closest('li').find('.completion_prompt_manager_prompt_name').attr('data-pm-name');
 
-        // ถ้ามี identifier ค่อยบันทึกค่ะ
-        if (identifier) {
-            toggleStates[identifier] = isOn;
+        if (promptName) {
+            toggleStates[promptName] = isOn;
             count++;
         }
     });
 
-    extension_settings[extensionName].presets[currentPreset] = toggleStates;
+    extension_settings[extensionName].myPresets[currentName] = toggleStates;
     saveSettingsDebounced();
-
-    toastr.success(`บันทึกสถานะ ${count} Toggles สำหรับ Preset: ${currentPreset} เรียบร้อยแล้วค่ะ!`, "Preset Toggle Saver");
-    console.log(`[${extensionName}] บันทึก Preset [${currentPreset}]:`, toggleStates);
+    toastr.success(`บันทึกสถานะ ${count} Toggles ลงใน '${currentName}' แล้วค่ะ`, "Toggle Presets");
 }
 
-// CHANGED: เปลี่ยนวิธีโหลดให้จับคู่กับ data-pm-identifier
-function applySavedToggles(presetName) {
-    const savedStates = extension_settings[extensionName].presets[presetName];
+// โหลดและปรับ Toggle ตามที่เซฟไว้
+function onApplyClicked() {
+    const currentName = $("#pts-preset-select").val();
+    if (!currentName) return;
 
-    if (!savedStates) {
-        console.log(`[${extensionName}] ไม่มีข้อมูล Toggles ที่บันทึกไว้สำหรับ: ${presetName}`);
-        return;
-    }
+    const savedStates = extension_settings[extensionName].myPresets[currentName];
+    if (!savedStates) return;
 
-    console.log(`[${extensionName}] กำลังโหลด Toggles สำหรับ: ${presetName}`);
     let changedCount = 0;
 
     $('#completion_prompt_manager .prompt-manager-toggle-action').each(function() {
-        const identifier = $(this).closest('li').attr('data-pm-identifier');
+        const promptName = $(this).closest('li').find('.completion_prompt_manager_prompt_name').attr('data-pm-name');
 
-        // ถ้าไม่มี identifier หรือเราไม่เคยเซฟค่าของตัวนี้ไว้ ก็ข้ามไปค่ะ
-        if (!identifier || savedStates[identifier] === undefined) return;
+        if (!promptName || savedStates[promptName] === undefined) return;
 
-        const shouldBeOn = savedStates[identifier];
+        const shouldBeOn = savedStates[promptName];
         const isCurrentlyOn = $(this).hasClass('fa-toggle-on');
 
         if (shouldBeOn !== isCurrentlyOn) {
@@ -85,35 +108,22 @@ function applySavedToggles(presetName) {
         }
     });
 
-    if (changedCount > 0) {
-        toastr.info(`ปรับสถานะ Toggles อัตโนมัติ (${changedCount} รายการ) สำหรับ: ${presetName}`, "Preset Toggle Saver");
-    }
+    extension_settings[extensionName].currentPreset = currentName;
+    saveSettingsDebounced();
+    toastr.info(`ปรับสถานะ Toggles (${changedCount} รายการ)`, "Toggle Presets");
 }
 
-function updatePresetUi() {
-    const currentPreset = getCurrentPresetName();
+// ลบ Preset
+function onDeleteClicked() {
+    const currentName = $("#pts-preset-select").val();
+    if (!currentName) return;
 
-    $("#preset-toggle-status").html(`
-        <p>กำลังตั้งค่า Toggle สำหรับ Preset: <b>${currentPreset}</b></p>
-        <div style="margin-top: 10px; display: flex; gap: 5px;">
-            <input id="pts-btn-save" class="menu_button" type="button" value="เซฟ Toggles" />
-            <input id="pts-btn-delete" class="menu_button" type="button" value="ลบข้อมูล Preset นี้" />
-        </div>
-    `);
-
-    $("#pts-btn-save").off("click").on("click", onSaveButtonClicked);
-    $("#pts-btn-delete").off("click").on("click", () => console.log(`[${extensionName}] ปุ่ม 'ลบ' ถูกคลิก (Preset: ${currentPreset})`));
-}
-
-function onPresetChanged() {
-    updatePresetUi();
-    const newPresetName = getCurrentPresetName();
-
-    if (newPresetName !== "ไม่ทราบชื่อ Preset") {
-        // ให้เวลา SillyTavern วางเรียง Prompt ให้เสร็จก่อนนิดนึงค่ะ
-        setTimeout(() => {
-            applySavedToggles(newPresetName);
-        }, 1000);
+    if (confirm(`คุณแน่ใจนะคะว่าจะลบ Preset '${currentName}' ? ความทรงจำนี้จะไม่สามารถเรียกคืนได้แล้วนะคะ...`)) {
+        delete extension_settings[extensionName].myPresets[currentName];
+        extension_settings[extensionName].currentPreset = "";
+        saveSettingsDebounced();
+        updateDropdown();
+        toastr.success(`ลบ '${currentName}' เรียบร้อยแล้วค่ะ`, "Toggle Presets");
     }
 }
 
@@ -124,11 +134,18 @@ jQuery(async () => {
         const settingsHtml = await $.get(`${extensionFolderPath}/example.html`);
         $("#extensions_settings2").append(settingsHtml);
 
+        // สร้าง UI ของเราเองแยกต่างหาก
         const mainUiHtml = `
-            <div id="preset-toggle-saver-main-ui" style="margin-top: 10px; margin-bottom: 10px; padding: 10px; border: 1px solid var(--SmartThemeBorderColor); border-radius: 5px;">
-                <h4 style="margin-top: 0; margin-bottom: 10px;">🌸 Preset Toggle Saver</h4>
-                <div id="preset-toggle-status">
-                    <p><i>กำลังรอการเชื่อมต่อกับ Preset ปัจจุบัน...</i></p>
+            <div id="pts-standalone-ui" style="margin: 15px 0; padding: 15px; background: var(--SmartThemeBlurTintColor); border: 1px solid var(--SmartThemeBorderColor); border-radius: 8px;">
+                <h4 style="margin: 0 0 10px 0;"><span class="fa-solid fa-toggle-on"></span> Toggle Presets Manager</h4>
+                <div style="display: flex; gap: 5px; align-items: center; margin-bottom: 10px;">
+                    <select id="pts-preset-select" class="text_pole" style="flex-grow: 1;"></select>
+                    <div id="pts-btn-new" class="menu_button fa-solid fa-plus" title="สร้างใหม่"></div>
+                </div>
+                <div style="display: flex; gap: 5px;">
+                    <input id="pts-btn-apply" class="menu_button" type="button" value="โหลดมาใช้" style="flex: 1;" />
+                    <input id="pts-btn-save" class="menu_button" type="button" value="เซฟทับ" style="flex: 1;" />
+                    <div id="pts-btn-delete" class="menu_button fa-solid fa-trash redWarningBG" title="ลบ" style="padding: 10px;"></div>
                 </div>
             </div>
         `;
@@ -136,14 +153,18 @@ jQuery(async () => {
         $(mainUiHtml).insertBefore("#completion_prompt_manager");
 
         loadSettings();
-        updatePresetUi();
+        updateDropdown();
 
-        setTimeout(updatePresetUi, 1000);
-        setTimeout(updatePresetUi, 3000);
+        // ผูก Event ให้ปุ่มต่างๆ
+        $("#pts-btn-new").on("click", onNewClicked);
+        $("#pts-btn-save").on("click", onSaveClicked);
+        $("#pts-btn-apply").on("click", onApplyClicked);
+        $("#pts-btn-delete").on("click", onDeleteClicked);
 
-        $(document).on("change", 'select[id^="settings_preset_"]', onPresetChanged);
-        $(document).on("click", '.api-connection-settings', () => {
-             setTimeout(onPresetChanged, 1000);
+        // เมื่อเปลี่ยน Dropdown ให้จำค่าไว้เฉยๆ (ยังไม่สลับ Toggle จนกว่าจะกดปุ่ม 'โหลดมาใช้')
+        $("#pts-preset-select").on("change", function() {
+            extension_settings[extensionName].currentPreset = $(this).val();
+            saveSettingsDebounced();
         });
 
         console.log(`[${extensionName}] ✅ Loaded successfully`);
