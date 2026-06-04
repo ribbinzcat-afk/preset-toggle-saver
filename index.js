@@ -5,8 +5,8 @@ const extensionName = "preset-toggle-saver";
 const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
 
 const defaultSettings = {
-    myPresets: {},       // เก็บข้อมูล Toggle ในแต่ละ Preset
-    currentPreset: ""    // จำว่าตอนนี้เรากำลังเลือก Preset อะไรอยู่
+    folders: {},       // โครงสร้างใหม่: { "AI Preset หลัก": { "กลุ่ม Toggle 1": {...}, "กลุ่ม Toggle 2": {...} } }
+    lastSelected: {}   // จำว่าใน AI Preset นี้ คุณเลือกกลุ่ม Toggle ไหนค้างไว้ล่าสุด
 };
 
 function loadSettings() {
@@ -14,53 +14,80 @@ function loadSettings() {
     if (Object.keys(extension_settings[extensionName]).length === 0) {
         Object.assign(extension_settings[extensionName], defaultSettings);
     }
-    if (!extension_settings[extensionName].myPresets) extension_settings[extensionName].myPresets = {};
-    if (extension_settings[extensionName].currentPreset === undefined) extension_settings[extensionName].currentPreset = "";
+    if (!extension_settings[extensionName].folders) extension_settings[extensionName].folders = {};
+    if (!extension_settings[extensionName].lastSelected) extension_settings[extensionName].lastSelected = {};
 }
 
-// อัปเดตรายชื่อใน Dropdown
+// ดึงชื่อ AI Preset หลักที่กำลังใช้อยู่ (ชื่อกล่องใบใหญ่)
+function getMainPresetName() {
+    const visibleSelect = $('select[id^="settings_preset_"]:visible');
+    if (visibleSelect.length > 0) {
+        const presetName = visibleSelect.find(":selected").text();
+        return presetName || "Unknown";
+    }
+    return "Unknown";
+}
+
+// อัปเดตรายชื่อใน Dropdown ให้แสดงเฉพาะกลุ่ม Toggle ที่อยู่ในกล่องใบนี้
 function updateDropdown() {
-    const presetNames = Object.keys(extension_settings[extensionName].myPresets);
+    const mainPreset = getMainPresetName();
     const $select = $("#pts-preset-select");
     $select.empty();
 
-    if (presetNames.length === 0) {
-        $select.append(`<option value="">(ยังไม่มี Preset)</option>`);
+    if (mainPreset === "Unknown") {
+        $select.append(`<option value="">(ไม่พบ AI Preset หลัก)</option>`);
+        return;
+    }
+
+    // ถ้ายังไม่มีโฟลเดอร์สำหรับ AI Preset นี้ ให้สร้างเตรียมไว้เลย
+    if (!extension_settings[extensionName].folders[mainPreset]) {
+        extension_settings[extensionName].folders[mainPreset] = {};
+    }
+
+    const toggleGroups = Object.keys(extension_settings[extensionName].folders[mainPreset]);
+
+    if (toggleGroups.length === 0) {
+        $select.append(`<option value="">(ยังไม่มีกลุ่ม Toggle ใน ${mainPreset})</option>`);
     } else {
-        presetNames.forEach(name => {
+        toggleGroups.forEach(name => {
             $select.append(`<option value="${name}">${name}</option>`);
         });
-        // เลือกตัวที่เคยเลือกไว้
-        if (extension_settings[extensionName].currentPreset && presetNames.includes(extension_settings[extensionName].currentPreset)) {
-            $select.val(extension_settings[extensionName].currentPreset);
+
+        // คืนค่าตัวที่เคยเลือกไว้ล่าสุดของกล่องใบนี้
+        const lastUsed = extension_settings[extensionName].lastSelected[mainPreset];
+        if (lastUsed && toggleGroups.includes(lastUsed)) {
+            $select.val(lastUsed);
         }
     }
 }
 
-// สร้าง Preset ใหม่
 function onNewClicked() {
-    const newName = prompt("ตั้งชื่อ Preset ใหม่สำหรับ Toggle ของคุณค่ะ:");
+    const mainPreset = getMainPresetName();
+    if (mainPreset === "Unknown") return;
+
+    const newName = prompt(`ตั้งชื่อกลุ่ม Toggle ใหม่ (จะถูกเก็บไว้ใน ${mainPreset}) :`);
     if (!newName) return;
 
-    if (extension_settings[extensionName].myPresets[newName]) {
-        toastr.warning("ชื่อนี้มีอยู่แล้วค่ะ ลองใช้ชื่ออื่นนะคะ", "Toggle Presets");
+    if (extension_settings[extensionName].folders[mainPreset][newName]) {
+        toastr.warning("ชื่อนี้มีอยู่แล้วในโฟลเดอร์นี้ค่ะ ลองใช้ชื่ออื่นนะคะ", "Toggle Presets");
         return;
     }
 
-    // สร้างพื้นที่ว่างๆ ไว้ก่อน
-    extension_settings[extensionName].myPresets[newName] = {};
-    extension_settings[extensionName].currentPreset = newName;
+    // สร้างพื้นที่ว่างในโฟลเดอร์ของ AI Preset นี้
+    extension_settings[extensionName].folders[mainPreset][newName] = {};
+    extension_settings[extensionName].lastSelected[mainPreset] = newName;
     saveSettingsDebounced();
 
     updateDropdown();
-    onSaveClicked(); // กดเซฟสถานะปัจจุบันให้ทันที
+    onSaveClicked(); // เซฟค่าปัจจุบันลงไปทันที
 }
 
-// เซฟสถานะ Toggle ลง Preset ปัจจุบัน
 function onSaveClicked() {
-    const currentName = $("#pts-preset-select").val();
-    if (!currentName) {
-        toastr.warning("กรุณาสร้างหรือเลือก Preset ก่อนเซฟนะคะ", "Toggle Presets");
+    const mainPreset = getMainPresetName();
+    const currentToggleName = $("#pts-preset-select").val();
+
+    if (!currentToggleName) {
+        toastr.warning("กรุณาสร้างหรือเลือกกลุ่ม Toggle ก่อนเซฟนะคะ", "Toggle Presets");
         return;
     }
 
@@ -69,8 +96,6 @@ function onSaveClicked() {
 
     $('#completion_prompt_manager .prompt-manager-toggle-action').each(function() {
         const isOn = $(this).hasClass('fa-toggle-on');
-
-        // จำจาก "ชื่อ" ของหัวข้อ (เช่น ♡ Milky Core ♡) แทนรหัสยาวๆ ค่ะ
         const promptName = $(this).closest('li').find('.completion_prompt_manager_prompt_name').attr('data-pm-name');
 
         if (promptName) {
@@ -79,24 +104,24 @@ function onSaveClicked() {
         }
     });
 
-    extension_settings[extensionName].myPresets[currentName] = toggleStates;
+    extension_settings[extensionName].folders[mainPreset][currentToggleName] = toggleStates;
     saveSettingsDebounced();
-    toastr.success(`บันทึกสถานะ ${count} Toggles ลงใน '${currentName}' แล้วค่ะ`, "Toggle Presets");
+    toastr.success(`บันทึกสถานะ ${count} Toggles ลงใน '${currentToggleName}' เรียบร้อยแล้วค่ะ`, "Toggle Presets");
 }
 
-// โหลดและปรับ Toggle ตามที่เซฟไว้
 function onApplyClicked() {
-    const currentName = $("#pts-preset-select").val();
-    if (!currentName) return;
+    const mainPreset = getMainPresetName();
+    const currentToggleName = $("#pts-preset-select").val();
 
-    const savedStates = extension_settings[extensionName].myPresets[currentName];
+    if (!currentToggleName || !extension_settings[extensionName].folders[mainPreset]) return;
+
+    const savedStates = extension_settings[extensionName].folders[mainPreset][currentToggleName];
     if (!savedStates) return;
 
     let changedCount = 0;
 
     $('#completion_prompt_manager .prompt-manager-toggle-action').each(function() {
         const promptName = $(this).closest('li').find('.completion_prompt_manager_prompt_name').attr('data-pm-name');
-
         if (!promptName || savedStates[promptName] === undefined) return;
 
         const shouldBeOn = savedStates[promptName];
@@ -108,23 +133,43 @@ function onApplyClicked() {
         }
     });
 
-    extension_settings[extensionName].currentPreset = currentName;
+    // จำไว้ว่าเราใช้กลุ่มนี้ล่าสุด
+    extension_settings[extensionName].lastSelected[mainPreset] = currentToggleName;
     saveSettingsDebounced();
-    toastr.info(`ปรับสถานะ Toggles (${changedCount} รายการ)`, "Toggle Presets");
+
+    if (changedCount > 0) {
+        toastr.info(`ปรับสถานะ Toggles (${changedCount} รายการ)`, "Toggle Presets");
+    } else {
+        toastr.info(`Toggle ทุกอันอยู่ในสถานะที่ถูกต้องแล้วค่ะ`, "Toggle Presets");
+    }
 }
 
-// ลบ Preset
 function onDeleteClicked() {
-    const currentName = $("#pts-preset-select").val();
-    if (!currentName) return;
+    const mainPreset = getMainPresetName();
+    const currentToggleName = $("#pts-preset-select").val();
 
-    if (confirm(`คุณแน่ใจนะคะว่าจะลบ Preset '${currentName}' ? ความทรงจำนี้จะไม่สามารถเรียกคืนได้แล้วนะคะ...`)) {
-        delete extension_settings[extensionName].myPresets[currentName];
-        extension_settings[extensionName].currentPreset = "";
+    if (!currentToggleName) return;
+
+    if (confirm(`คุณแน่ใจนะคะว่าจะลบกลุ่ม Toggle '${currentToggleName}' ออกจาก ${mainPreset} ?`)) {
+        delete extension_settings[extensionName].folders[mainPreset][currentToggleName];
+
+        // ถ้าระบบจำว่าตัวที่ถูกลบคือตัวล่าสุดที่ใช้ ก็ให้ล้างค่าทิ้งด้วยค่ะ
+        if (extension_settings[extensionName].lastSelected[mainPreset] === currentToggleName) {
+            delete extension_settings[extensionName].lastSelected[mainPreset];
+        }
+
         saveSettingsDebounced();
         updateDropdown();
-        toastr.success(`ลบ '${currentName}' เรียบร้อยแล้วค่ะ`, "Toggle Presets");
+        toastr.success(`ลบ '${currentToggleName}' เรียบร้อยแล้วค่ะ`, "Toggle Presets");
     }
+}
+
+// เมื่อ AI Preset หลักเปลี่ยน ให้เปลี่ยนกล่องความทรงจำ (Dropdown) ตาม
+function onMainPresetChanged() {
+    updateDropdown();
+
+    // หากต้องการให้มันโหลด Toggle อัตโนมัติตามตัวล่าสุดที่เคยเลือกไว้ในกล่องนี้ ให้เอา // ด้านล่างออกค่ะ
+    // setTimeout(onApplyClicked, 1000);
 }
 
 jQuery(async () => {
@@ -134,37 +179,50 @@ jQuery(async () => {
         const settingsHtml = await $.get(`${extensionFolderPath}/example.html`);
         $("#extensions_settings2").append(settingsHtml);
 
-        // สร้าง UI ของเราเองแยกต่างหาก
         const mainUiHtml = `
             <div id="pts-standalone-ui" style="margin: 15px 0; padding: 15px; background: var(--SmartThemeBlurTintColor); border: 1px solid var(--SmartThemeBorderColor); border-radius: 8px;">
-                <h4 style="margin: 0 0 10px 0;"><span class="fa-solid fa-toggle-on"></span> Toggle Presets Manager</h4>
+                <h4 style="margin: 0 0 10px 0;"><span class="fa-solid fa-folder-open"></span> Toggle Presets</h4>
                 <div style="display: flex; gap: 5px; align-items: center; margin-bottom: 10px;">
                     <select id="pts-preset-select" class="text_pole" style="flex-grow: 1;"></select>
-                    <div id="pts-btn-new" class="menu_button fa-solid fa-plus" title="สร้างใหม่"></div>
+                    <div id="pts-btn-new" class="menu_button fa-solid fa-plus" title="สร้างกลุ่ม Toggle ใหม่ใน Preset นี้"></div>
                 </div>
                 <div style="display: flex; gap: 5px;">
                     <input id="pts-btn-apply" class="menu_button" type="button" value="โหลดมาใช้" style="flex: 1;" />
                     <input id="pts-btn-save" class="menu_button" type="button" value="เซฟทับ" style="flex: 1;" />
-                    <div id="pts-btn-delete" class="menu_button fa-solid fa-trash redWarningBG" title="ลบ" style="padding: 10px;"></div>
+                    <div id="pts-btn-delete" class="menu_button fa-solid fa-trash redWarningBG" title="ลบกลุ่มนี้" style="padding: 10px;"></div>
                 </div>
+                <small style="color: var(--SmartThemeBodyColor); opacity: 0.7;">* กลุ่ม Toggle เหล่านี้ถูกจัดเก็บแยกตาม AI Preset หลักแต่ละตัวค่ะ</small>
             </div>
         `;
 
         $(mainUiHtml).insertBefore("#completion_prompt_manager");
 
         loadSettings();
-        updateDropdown();
 
-        // ผูก Event ให้ปุ่มต่างๆ
+        // รอให้หน้าต่างโหลดเสร็จก่อนค่อยดึงข้อมูลมาแสดง
+        setTimeout(updateDropdown, 1000);
+
         $("#pts-btn-new").on("click", onNewClicked);
         $("#pts-btn-save").on("click", onSaveClicked);
         $("#pts-btn-apply").on("click", onApplyClicked);
         $("#pts-btn-delete").on("click", onDeleteClicked);
 
-        // เมื่อเปลี่ยน Dropdown ให้จำค่าไว้เฉยๆ (ยังไม่สลับ Toggle จนกว่าจะกดปุ่ม 'โหลดมาใช้')
+        // เมื่อคุณเปลี่ยน Dropdown ของเรา มันจะแค่จำไว้ว่าคุณเลือกเล่มไหนล่าสุด
         $("#pts-preset-select").on("change", function() {
-            extension_settings[extensionName].currentPreset = $(this).val();
-            saveSettingsDebounced();
+            const mainPreset = getMainPresetName();
+            const selectedName = $(this).val();
+            if (mainPreset !== "Unknown" && selectedName) {
+                extension_settings[extensionName].lastSelected[mainPreset] = selectedName;
+                saveSettingsDebounced();
+            }
+        });
+
+        // ดักจับตอนที่ AI Preset หลักของ SillyTavern เปลี่ยน
+        $(document).on("change", 'select[id^="settings_preset_"]', () => {
+             setTimeout(onMainPresetChanged, 500);
+        });
+        $(document).on("click", '.api-connection-settings', () => {
+             setTimeout(onMainPresetChanged, 1000);
         });
 
         console.log(`[${extensionName}] ✅ Loaded successfully`);
