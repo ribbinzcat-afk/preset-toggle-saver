@@ -13,12 +13,18 @@ jQuery(async () => {
         // 1. ใส่ Drawer เดิมไว้ที่หน้า Extensions
         $("#extensions_settings2").append(settingsHtml);
 
-        // NEW: 2. นำ Template ที่เราสร้างไว้ ไปแปะในหน้า AI Response Configuration
-        // โดยปกติหน้าตั้งค่า Sliders ต่างๆ จะอยู่ใน #textgeneration_settings
-        const mainUiHtml = $("#preset-toggle-ui-template").html();
+        // NEW: 2. สร้าง UI ของเราเป็นตัวแปร String โดยตรง เพื่อป้องกันปัญหาดึง Template ไม่ติด
+        const mainUiHtml = `
+            <div id="preset-toggle-saver-main-ui" style="margin-top: 10px; margin-bottom: 10px; padding: 10px; border: 1px solid var(--SmartThemeBorderColor); border-radius: 5px;">
+                <h4 style="margin-top: 0; margin-bottom: 10px;">🌸 Preset Toggle Saver</h4>
+                <div id="preset-toggle-status">
+                    <p><i>กำลังรอการเชื่อมต่อกับ Preset ปัจจุบัน...</i></p>
+                </div>
+            </div>
+        `;
 
-        // ลองแทรกไว้ด้านล่างสุดของหน้าต่าง Text Generation
-        $("#textgeneration_settings").append(mainUiHtml);
+        // NEW: 3. แทรก UI ของเราไว้ "ด้านบน" (insertBefore) ของ completion_prompt_manager
+        $(mainUiHtml).insertBefore("#completion_prompt_manager");
 
         console.log(`[${extensionName}] ✅ Loaded successfully`);
     } catch (error) {
