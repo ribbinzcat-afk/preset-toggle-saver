@@ -1,3 +1,4 @@
+<!-- หน้าต่างนี้จะยังอยู่ที่เมนู Extension เหมือนเดิม ไว้สำหรับตั้งค่าพื้นฐานในอนาคต -->
 <div class="preset-toggle-saver-settings">
     <div class="inline-drawer">
         <div class="inline-drawer-toggle inline-drawer-header">
@@ -5,12 +6,19 @@
             <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
         </div>
         <div class="inline-drawer-content">
-            <!-- NEW: เพิ่ม Checkbox ทดสอบ -->
-            <div>
-                <input id="test_checkbox" type="checkbox" />
-                <label for="test_checkbox">Test Save Toggle</label>
-            </div>
-            <p><small>ลองติ๊กถูกแล้วรีเฟรชหน้าเว็บดูนะคะ ระบบควรจะจำค่าที่คุณเลือกไว้ค่ะ</small></p>
+            <p>✅ Extension is active.</p>
+            <p><small>หน้าต่างหลักถูกย้ายไปที่ AI Response Configuration แล้วค่ะ</small></p>
         </div>
     </div>
 </div>
+
+<!-- หน้าต่างนี้จะถูกดึงไปแปะที่หน้า AI Response Configuration -->
+<template id="preset-toggle-ui-template">
+    <div id="preset-toggle-saver-main-ui" style="margin-top: 15px; padding: 10px; border: 1px solid var(--SmartThemeBorderColor); border-radius: 5px;">
+        <h4 style="margin-top: 0; margin-bottom: 10px;">🌸 Preset Toggle Saver</h4>
+        <div id="preset-toggle-status">
+            <p><i>กำลังรอการเชื่อมต่อกับ Preset ปัจจุบัน...</i></p>
+        </div>
+        <!-- เดี๋ยวเราจะมาเพิ่มปุ่มกันใน Stage ถัดไปค่ะ -->
+    </div>
+</template>
