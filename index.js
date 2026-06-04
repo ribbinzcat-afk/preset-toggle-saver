@@ -4,18 +4,53 @@ import { saveSettingsDebounced } from "../../../../script.js";
 const extensionName = "preset-toggle-saver";
 const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
 
-// CHANGED: แก้ไขฟังก์ชันดึงชื่อ Preset ให้รองรับหลาย API และดึง Text ออกมา
-function getCurrentPresetName() {
-    // หา <select> ที่ id เริ่มด้วย "settings_preset_" และกำลังแสดงผลอยู่บนหน้าจอ
-    const visibleSelect = $('select[id^="settings_preset_"]:visible');
+// NEW: เตรียมพื้นที่สำหรับเก็บข้อมูล Preset ของเรา
+const defaultSettings = {
+    presets: {} // จะเก็บข้อมูลแบบนี้ค่ะ: { "ชื่อพรีเซ็ต": [true, false, true, ...] }
+};
 
+function getCurrentPresetName() {
+    const visibleSelect = $('select[id^="settings_preset_"]:visible');
     if (visibleSelect.length > 0) {
-        // ใช้ .text() เพื่อดึง "ชื่อพรีเซ็ต" ที่แสดงให้คนอ่าน ไม่ใช่ .val() ที่อาจเป็นแค่ตัวเลข
         const presetName = visibleSelect.find(":selected").text();
         return presetName || "ไม่ทราบชื่อ Preset";
     }
-
     return "ไม่ทราบชื่อ Preset";
+}
+
+// NEW: ฟังก์ชันสำหรับโหลดการตั้งค่า
+function loadSettings() {
+    extension_settings[extensionName] = extension_settings[extensionName] || {};
+    if (Object.keys(extension_settings[extensionName]).length === 0) {
+        Object.assign(extension_settings[extensionName], defaultSettings);
+    }
+    if (!extension_settings[extensionName].presets) {
+        extension_settings[extensionName].presets = {};
+    }
+}
+
+// NEW: ฟังก์ชันทำงานเมื่อกดปุ่ม "เซฟ"
+function onSaveButtonClicked() {
+    const currentPreset = getCurrentPresetName();
+    if (currentPreset === "ไม่ทราบชื่อ Preset") {
+        toastr.warning("ไม่สามารถเซฟได้เพราะไม่ทราบชื่อ Preset ค่ะ", "Preset Toggle Saver");
+        return;
+    }
+
+    // กวาดหา Toggle ทั้งหมดที่มีคลาส prompt-manager-toggle-action
+    const toggleStates = [];
+    $('.prompt-manager-toggle-action').each(function() {
+        // ถ้ามีคลาส fa-toggle-on ถือว่าเปิดอยู่ (true)
+        const isOn = $(this).hasClass('fa-toggle-on');
+        toggleStates.push(isOn);
+    });
+
+    // บันทึกลงใน Settings
+    extension_settings[extensionName].presets[currentPreset] = toggleStates;
+    saveSettingsDebounced();
+
+    toastr.success(`บันทึกสถานะ ${toggleStates.length} Toggles สำหรับ Preset: ${currentPreset} เรียบร้อยแล้วค่ะ!`, "Preset Toggle Saver");
+    console.log(`[${extensionName}] บันทึก Preset [${currentPreset}]:`, toggleStates);
 }
 
 function updatePresetUi() {
@@ -24,14 +59,14 @@ function updatePresetUi() {
     $("#preset-toggle-status").html(`
         <p>กำลังตั้งค่า Toggle สำหรับ Preset: <b>${currentPreset}</b></p>
         <div style="margin-top: 10px; display: flex; gap: 5px;">
-            <input id="pts-btn-add" class="menu_button" type="button" value="เพิ่ม Toggle" />
-            <input id="pts-btn-save" class="menu_button" type="button" value="เซฟ" />
-            <input id="pts-btn-delete" class="menu_button" type="button" value="ลบทั้งหมด" />
+            <input id="pts-btn-save" class="menu_button" type="button" value="เซฟ Toggles" />
+            <input id="pts-btn-delete" class="menu_button" type="button" value="ลบข้อมูล Preset นี้" />
         </div>
     `);
 
-    $("#pts-btn-add").off("click").on("click", () => console.log(`[${extensionName}] ปุ่ม 'เพิ่ม' ถูกคลิก (Preset: ${currentPreset})`));
-    $("#pts-btn-save").off("click").on("click", () => console.log(`[${extensionName}] ปุ่ม 'เซฟ' ถูกคลิก (Preset: ${currentPreset})`));
+    // ผูก Event ให้ปุ่มเซฟ
+    $("#pts-btn-save").off("click").on("click", onSaveButtonClicked);
+
     $("#pts-btn-delete").off("click").on("click", () => console.log(`[${extensionName}] ปุ่ม 'ลบ' ถูกคลิก (Preset: ${currentPreset})`));
 }
 
@@ -53,14 +88,16 @@ jQuery(async () => {
 
         $(mainUiHtml).insertBefore("#completion_prompt_manager");
 
+        loadSettings();
         updatePresetUi();
 
-        // CHANGED: ดักจับการเปลี่ยนแปลงของ <select> ทุกตัวที่เป็น Preset Manager
-        $(document).on("change", 'select[id^="settings_preset_"]', updatePresetUi);
+        // CHANGED: สั่งให้อัปเดต UI ซ้ำอีกครั้งหลังจากเวลาผ่านไปนิดหน่อย เพื่อแก้ปัญหาชื่อไม่ขึ้นตอนโหลดครั้งแรก
+        setTimeout(updatePresetUi, 1000);
+        setTimeout(updatePresetUi, 2500);
 
-        // NEW: บางครั้งตอนเปลี่ยน API หน้าจอจะเปลี่ยนไปดึง Dropdown ตัวอื่นมาแสดง เราต้องอัปเดต UI ด้วย
+        $(document).on("change", 'select[id^="settings_preset_"]', updatePresetUi);
         $(document).on("click", '.api-connection-settings', () => {
-             setTimeout(updatePresetUi, 100); // หน่วงเวลานิดนึงรอให้ UI ของ SillyTavern โหลดเสร็จ
+             setTimeout(updatePresetUi, 100);
         });
 
         console.log(`[${extensionName}] ✅ Loaded successfully`);
