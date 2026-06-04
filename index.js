@@ -5,7 +5,7 @@ const extensionName = "preset-toggle-saver";
 const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
 
 const defaultSettings = {
-    presets: {} // รูปแบบข้อมูลจะเปลี่ยนไปเป็น { "Preset Name": { "toggle_id_1": true, "toggle_id_2": false } }
+    presets: {}
 };
 
 function getCurrentPresetName() {
@@ -27,7 +27,6 @@ function loadSettings() {
     }
 }
 
-// CHANGED: เปลี่ยนวิธีเซฟ ให้จดจำ Identifier (ID ของ div ที่ครอบมันอยู่ หรือ ID ของตัวมันเอง)
 function onSaveButtonClicked() {
     const currentPreset = getCurrentPresetName();
     if (currentPreset === "ไม่ทราบชื่อ Preset") {
@@ -38,14 +37,14 @@ function onSaveButtonClicked() {
     const toggleStates = {};
     let count = 0;
 
-    $('.prompt-manager-toggle-action').each(function() {
+    // CHANGED: ตีกรอบให้มองเฉพาะ Toggle ที่อยู่ข้างใน completion_prompt_manager เท่านั้น
+    $('#completion_prompt_manager .prompt-manager-toggle-action').each(function(index) {
         const isOn = $(this).hasClass('fa-toggle-on');
 
-        // หา ID ที่ไม่ซ้ำกันของ Toggle ตัวนี้ โดยหาจาก parent หรือตัวมันเอง
-        // ใน SillyTavern Toggle มักจะอยู่ใน div ที่มี id เริ่มด้วย "prompt-manager-"
-        const parentId = $(this).closest('[id]').attr('id') || `unknown_toggle_${count}`;
+        // CHANGED: ใช้ Index ร่วมกับคลาสที่เฉพาะเจาะจง เพื่อให้มั่นใจว่าเป็นลำดับที่แท้จริงในกล่องนี้
+        const identifier = `prompt_toggle_${index}`;
 
-        toggleStates[parentId] = isOn;
+        toggleStates[identifier] = isOn;
         count++;
     });
 
@@ -56,7 +55,6 @@ function onSaveButtonClicked() {
     console.log(`[${extensionName}] บันทึก Preset [${currentPreset}]:`, toggleStates);
 }
 
-// CHANGED: เปลี่ยนวิธีโหลด ให้จับคู่กับ Identifier ที่เซฟไว้
 function applySavedToggles(presetName) {
     const savedStates = extension_settings[extensionName].presets[presetName];
 
@@ -66,17 +64,15 @@ function applySavedToggles(presetName) {
     }
 
     console.log(`[${extensionName}] กำลังโหลด Toggles สำหรับ: ${presetName}`);
-
     let changedCount = 0;
 
-    $('.prompt-manager-toggle-action').each(function() {
-        // หา ID แบบเดียวกับตอนที่เซฟ
-        const parentId = $(this).closest('[id]').attr('id');
+    // CHANGED: ค้นหาเฉพาะในกรอบเป้าหมายเดียวกันกับตอนเซฟ
+    $('#completion_prompt_manager .prompt-manager-toggle-action').each(function(index) {
+        const identifier = `prompt_toggle_${index}`;
 
-        // ถ้าหา ID ไม่เจอ หรือไม่มีข้อมูลที่เซฟไว้สำหรับ ID นี้ ให้ข้ามไปค่ะ
-        if (!parentId || savedStates[parentId] === undefined) return;
+        if (savedStates[identifier] === undefined) return;
 
-        const shouldBeOn = savedStates[parentId];
+        const shouldBeOn = savedStates[identifier];
         const isCurrentlyOn = $(this).hasClass('fa-toggle-on');
 
         if (shouldBeOn !== isCurrentlyOn) {
@@ -86,7 +82,7 @@ function applySavedToggles(presetName) {
     });
 
     if (changedCount > 0) {
-        toastr.info(`ปรับสถานะ Toggles อัตโนมัติ (${changedCount} รายการ)`, "Preset Toggle Saver");
+        toastr.info(`ปรับสถานะ Toggles อัตโนมัติ (${changedCount} รายการ) สำหรับ: ${presetName}`, "Preset Toggle Saver");
     }
 }
 
@@ -108,8 +104,12 @@ function updatePresetUi() {
 function onPresetChanged() {
     updatePresetUi();
     const newPresetName = getCurrentPresetName();
+
+    // CHANGED: ให้เวลาระบบ 1 วินาที เพื่อให้ SillyTavern เปลี่ยนหน้าต่างเสร็จก่อน แล้วค่อยโหลดค่า Toggle
     if (newPresetName !== "ไม่ทราบชื่อ Preset") {
-        applySavedToggles(newPresetName);
+        setTimeout(() => {
+            applySavedToggles(newPresetName);
+        }, 1000);
     }
 }
 
@@ -136,11 +136,10 @@ jQuery(async () => {
 
         setTimeout(updatePresetUi, 1000);
         setTimeout(updatePresetUi, 3000);
-        setTimeout(updatePresetUi, 6000);
 
         $(document).on("change", 'select[id^="settings_preset_"]', onPresetChanged);
         $(document).on("click", '.api-connection-settings', () => {
-             setTimeout(onPresetChanged, 100);
+             setTimeout(onPresetChanged, 1000); // เผื่อเวลาตอนเปลี่ยน API ด้วยค่ะ
         });
 
         console.log(`[${extensionName}] ✅ Loaded successfully`);
