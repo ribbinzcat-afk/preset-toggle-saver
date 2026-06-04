@@ -27,6 +27,7 @@ function loadSettings() {
     }
 }
 
+// CHANGED: เปลี่ยนวิธีจำไปใช้ data-pm-identifier (บัตรประชาชนของ Prompt)
 function onSaveButtonClicked() {
     const currentPreset = getCurrentPresetName();
     if (currentPreset === "ไม่ทราบชื่อ Preset") {
@@ -37,15 +38,17 @@ function onSaveButtonClicked() {
     const toggleStates = {};
     let count = 0;
 
-    // CHANGED: ตีกรอบให้มองเฉพาะ Toggle ที่อยู่ข้างใน completion_prompt_manager เท่านั้น
-    $('#completion_prompt_manager .prompt-manager-toggle-action').each(function(index) {
+    $('#completion_prompt_manager .prompt-manager-toggle-action').each(function() {
         const isOn = $(this).hasClass('fa-toggle-on');
 
-        // CHANGED: ใช้ Index ร่วมกับคลาสที่เฉพาะเจาะจง เพื่อให้มั่นใจว่าเป็นลำดับที่แท้จริงในกล่องนี้
-        const identifier = `prompt_toggle_${index}`;
+        // ย้อนกลับไปหา <li> ที่ครอบตัวมันอยู่ เพื่อดึง data-pm-identifier
+        const identifier = $(this).closest('li').attr('data-pm-identifier');
 
-        toggleStates[identifier] = isOn;
-        count++;
+        // ถ้ามี identifier ค่อยบันทึกค่ะ
+        if (identifier) {
+            toggleStates[identifier] = isOn;
+            count++;
+        }
     });
 
     extension_settings[extensionName].presets[currentPreset] = toggleStates;
@@ -55,6 +58,7 @@ function onSaveButtonClicked() {
     console.log(`[${extensionName}] บันทึก Preset [${currentPreset}]:`, toggleStates);
 }
 
+// CHANGED: เปลี่ยนวิธีโหลดให้จับคู่กับ data-pm-identifier
 function applySavedToggles(presetName) {
     const savedStates = extension_settings[extensionName].presets[presetName];
 
@@ -66,11 +70,11 @@ function applySavedToggles(presetName) {
     console.log(`[${extensionName}] กำลังโหลด Toggles สำหรับ: ${presetName}`);
     let changedCount = 0;
 
-    // CHANGED: ค้นหาเฉพาะในกรอบเป้าหมายเดียวกันกับตอนเซฟ
-    $('#completion_prompt_manager .prompt-manager-toggle-action').each(function(index) {
-        const identifier = `prompt_toggle_${index}`;
+    $('#completion_prompt_manager .prompt-manager-toggle-action').each(function() {
+        const identifier = $(this).closest('li').attr('data-pm-identifier');
 
-        if (savedStates[identifier] === undefined) return;
+        // ถ้าไม่มี identifier หรือเราไม่เคยเซฟค่าของตัวนี้ไว้ ก็ข้ามไปค่ะ
+        if (!identifier || savedStates[identifier] === undefined) return;
 
         const shouldBeOn = savedStates[identifier];
         const isCurrentlyOn = $(this).hasClass('fa-toggle-on');
@@ -105,8 +109,8 @@ function onPresetChanged() {
     updatePresetUi();
     const newPresetName = getCurrentPresetName();
 
-    // CHANGED: ให้เวลาระบบ 1 วินาที เพื่อให้ SillyTavern เปลี่ยนหน้าต่างเสร็จก่อน แล้วค่อยโหลดค่า Toggle
     if (newPresetName !== "ไม่ทราบชื่อ Preset") {
+        // ให้เวลา SillyTavern วางเรียง Prompt ให้เสร็จก่อนนิดนึงค่ะ
         setTimeout(() => {
             applySavedToggles(newPresetName);
         }, 1000);
@@ -139,7 +143,7 @@ jQuery(async () => {
 
         $(document).on("change", 'select[id^="settings_preset_"]', onPresetChanged);
         $(document).on("click", '.api-connection-settings', () => {
-             setTimeout(onPresetChanged, 1000); // เผื่อเวลาตอนเปลี่ยน API ด้วยค่ะ
+             setTimeout(onPresetChanged, 1000);
         });
 
         console.log(`[${extensionName}] ✅ Loaded successfully`);
